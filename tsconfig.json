@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "esnext", // Latest syntax (e.g. top-level await)
+    "types": ["node"], // Node.js types
+    "module": "esnext", // Native ESM
+    "lib": ["esnext"], // Only modern JS features, no browser APIs
+    "moduleResolution": "bundler", // Required for `module: esnext` in TS >= 5.x
+    "esModuleInterop": true, // Interop for CommonJS modules (e.g. chalk, dotenv)
+    "resolveJsonModule": true, // Allows importing JSON files
+    "forceConsistentCasingInFileNames": true, // Avoid case mismatch bugs (esp. on Linux)
+    "skipLibCheck": true, // Faster builds
+    "strict": true, // Full type safety
+    "experimentalDecorators": true, // Enable decorators
+    "emitDecoratorMetadata": true, // Required for class-validator / typeorm / inversify
+    "outDir": "dist", // Output folder
+    "baseUrl": ".", // Required for `paths` to work reliably
+    "paths": {
+      "@src/*": ["src/*"],
+      "@shared/*": ["src/shared/*"],
+      "@core/*": ["src/@core/*"],
+      "@infrastructure/*": ["src/infrastructure/*"],
+      "@utils/*": ["src/shared/utils/*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["dist", "node_modules", "**/*.test.ts"]
+}
