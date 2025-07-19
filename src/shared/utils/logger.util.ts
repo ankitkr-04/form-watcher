@@ -24,7 +24,7 @@ const logDirectory = getLogDirectory();
 
 // --- Pino Logger Configuration ---
 export const logger = pino({
-  level: env.LOG_LEVEL,
+    level: env.LOG_LEVEL as pino.Level,
   transport: {
     targets: [
       {

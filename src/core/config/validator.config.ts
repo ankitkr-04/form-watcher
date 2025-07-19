@@ -1,6 +1,12 @@
-import z from 'zod/v4';
+import { z } from 'zod/v4';
 
 import { ConfigurationError } from '../custom.errors';
+
+export const urlSchema = z
+  .url('Invalid URL')
+  .refine((url: string) => new URL(url).protocol === 'https:', {
+    message: 'Only HTTPS URLs are allowed',
+  });
 
 // Core
 const coreSchema = z.object({
@@ -12,7 +18,7 @@ const coreSchema = z.object({
 
 // Database
 const dbSchema = z.object({
-  DATABASE_URL: z.url('Invalid database URL'),
+  DATABASE_URL: z.string().url('Invalid database URL'),
 });
 
 // SMTP
@@ -22,10 +28,10 @@ const smtpSchema = z.object({
     .string()
     .regex(/^[0-9]+$/, 'SMTP port must be a number')
     .transform(Number)
-    .nonoptional('SMTP port is required'),
+    .refine((port) => port > 0 && port <= 65535, 'SMTP port must be between 1 and 65535'),
   SMTP_USER: z.string().min(1, 'SMTP user is required'),
   SMTP_PASS: z.string().min(1, 'SMTP password is required'),
-  SMTP_FROM: z.email('Invalid SMTP from email').default('noreply@example.com'),
+  SMTP_FROM: z.string().email('Invalid SMTP from email').default('noreply@example.com'),
 });
 
 // Health
@@ -95,11 +101,11 @@ const corsSchema = z.object({
 
 // Notifications
 const notificationSchema = z.object({
-  DISCORD_WEBHOOK_URL: z.url('Invalid Discord webhook URL').optional(),
-  SLACK_WEBHOOK_URL: z.url('Invalid Slack webhook URL').optional(),
+  DISCORD_WEBHOOK_URL: urlSchema.optional(),
+  SLACK_WEBHOOK_URL: urlSchema.optional(),
   SLACK_CHANNEL: z.string().optional(),
   SLACK_USERNAME: z.string().default('Form Watcher'),
-  SLACK_ICON_URL: z.url('Invalid Slack icon URL').optional(),
+  SLACK_ICON_URL: urlSchema.optional(),
 });
 
 // Final config schema

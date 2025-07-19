@@ -4,6 +4,7 @@ import { Form, WatcherResult } from '@src/shared/types/types';
 import { ContentFetcher } from '@src/shared/utils/content.fetcher.util';
 import { ContentNormalizer } from '@src/shared/utils/content.normalizer.util';
 import { ErrorLogger } from '@src/shared/utils/error.logger.util';
+import { handleError } from '@src/shared/utils/error.handler.util';
 import { HashGenerator } from '@src/shared/utils/hash.generator.util';
 import { InputValidator } from '@src/shared/utils/input.validator.util';
 
@@ -31,43 +32,34 @@ export class AiTextWatcher extends BaseWatcher {
    * Returns a `WatcherResult` indicating detection outcome and metadata.
    */
   protected async executeCheck(form: Form): Promise<WatcherResult> {
-    const startTime = Date.now();
-    let responseTime = 0;
+    return handleError(
+      async () => {
+        const startTime = Date.now();
+        const config = form.watcherConfig as { regex?: string };
+        if (!config?.regex) {
+          throw new ConfigurationError('Missing required "regex" pattern in watcherConfig');
+        }
 
-    try {
-      const config = form.watcherConfig as { regex?: string };
-      if (!config?.regex) {
-        throw new ConfigurationError('Missing required "regex" pattern in watcherConfig');
-      }
+        // Validate regex pattern before use
+        InputValidator.validateRegex(config.regex);
 
-      // Validate regex pattern before use
-      InputValidator.validateRegex(config.regex);
+        // Fetch HTML content from target URL
+        const { content } = await this.fetcher.fetch(form.url);
+        const responseTime = Date.now() - startTime;
 
-      // Fetch HTML content from target URL
-      const { content } = await this.fetcher.fetch(form.url);
-      responseTime = Date.now() - startTime;
+        // Normalize HTML (e.g., strip scripts, collapse whitespace, etc.)
+        const normalizedContent = ContentNormalizer.normalizeHtml(content);
 
-      // Normalize HTML (e.g., strip scripts, collapse whitespace, etc.)
-      const normalizedContent = ContentNormalizer.normalizeHtml(content);
+        const pattern = new RegExp(config.regex, 'i'); // case-insensitive by default
+        const isMatch = pattern.test(normalizedContent);
 
-      const pattern = new RegExp(config.regex, 'i'); // case-insensitive by default
-      const isMatch = pattern.test(normalizedContent);
-
-      return {
-        status: isMatch ? 'open' : 'closed',
-        hash: this.hasher.generate(normalizedContent),
-        responseTime,
-      };
-    } catch (error) {
-      responseTime = Date.now() - startTime;
-
-      this.logger.logWatcherError(form.id, error, {
-        url: form.url,
-        responseTime,
-        formId: form.id,
-      });
-
-      throw error;
-    }
+        return {
+          status: isMatch ? 'open' : 'closed',
+          hash: this.hasher.generate(normalizedContent),
+          responseTime,
+        };
+      },
+      { formId: form.id, watcher: this.name, stage: 'fetch-or-parse' }
+    );
   }
 }

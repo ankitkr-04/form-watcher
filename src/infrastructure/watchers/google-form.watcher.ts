@@ -5,12 +5,15 @@ import { Form, WatcherResult } from '@src/shared/types/types';
 import { ContentFetcher } from '@src/shared/utils/content.fetcher.util';
 import { ContentNormalizer } from '@src/shared/utils/content.normalizer.util';
 import { ErrorLogger } from '@src/shared/utils/error.logger.util';
+import { handleError } from '@src/shared/utils/error.handler.util';
 import { HashGenerator } from '@src/shared/utils/hash.generator.util';
+
 import { log } from '@src/shared/utils/logger.util';
 
 import { Cache } from '../cache';
 
 import { BaseWatcher } from './base.watcher';
+
 export class GoogleFormWatcher extends BaseWatcher {
   private readonly defaultFormClosedText = 'no longer accepting responses';
   private readonly closedFormPath = '/closedform';
@@ -68,52 +71,46 @@ export class GoogleFormWatcher extends BaseWatcher {
    * @throws Error if fetching or parsing fails.
    */
   protected async executeCheck(form: Form): Promise<WatcherResult> {
-    const startTime = Date.now();
-    let responseTime = 0;
+    return handleError(
+      async () => {
+        const startTime = Date.now();
+        const { content: html, finalUrl } = await this.fetcher.fetch(form.url);
+        const responseTime = Date.now() - startTime;
 
-    try {
-      // Fetch content and final URL after redirects
-      const { content: html, finalUrl } = await this.fetcher.fetch(form.url);
-      responseTime = Date.now() - startTime;
+        const normalized = ContentNormalizer.normalizeHtml(html);
+        const $ = cheerio.load(html);
 
-      const normalized = ContentNormalizer.normalizeHtml(html);
-      const $ = cheerio.load(html);
+        // Execute detection logics
+        const textBasedIsClosed = this.checkTextBasedClosure(normalized, form);
+        const elementBasedIsClosed = this.checkElementBasedClosure($);
+        const urlBasedIsClosed = this.checkUrlBasedClosure(finalUrl);
 
-      // Execute detection logics
-      const textBasedIsClosed = this.checkTextBasedClosure(normalized, form);
-      const elementBasedIsClosed = this.checkElementBasedClosure($);
-      const urlBasedIsClosed = this.checkUrlBasedClosure(finalUrl);
+        // Combine logics: Form is closed if any logic indicates closure
+        const isClosed = textBasedIsClosed || elementBasedIsClosed || urlBasedIsClosed;
+        const newStatus = isClosed ? 'closed' : 'open';
+        const hash = this.hasher.generate(normalized);
 
-      // Combine logics: Form is closed if any logic indicates closure
-      const isClosed = textBasedIsClosed || elementBasedIsClosed || urlBasedIsClosed;
-      const status = isClosed ? 'closed' : 'open';
-      const hash = this.hasher.generate(normalized);
+        const status = await this.cache.compareAndSet(`google_form:${form.id}:prev_hash`, hash);
 
-      // Log detection details for debugging
-      log.info(form.id, {
-        url: form.url,
-        finalUrl,
-        responseTime,
-        textBasedIsClosed,
-        elementBasedIsClosed,
-        urlBasedIsClosed,
-        closedTextUsed:
-          (form.watcherConfig as { closedText?: string })?.closedText || this.defaultFormClosedText,
-      });
+        // Log detection details for debugging
+        log.info(form.id, {
+          url: form.url,
+          finalUrl,
+          responseTime,
+          textBasedIsClosed,
+          elementBasedIsClosed,
+          urlBasedIsClosed,
+          closedTextUsed:
+            (form.watcherConfig as { closedText?: string })?.closedText || this.defaultFormClosedText,
+          status: newStatus,
+        });
 
-      return {
-        status,
-        hash,
-        responseTime,
-      };
-    } catch (error) {
-      responseTime = Date.now() - startTime;
-      this.logger.logWatcherError(form.id, error, {
-        url: form.url,
-        responseTime,
-        stage: 'fetch-or-parse',
-      });
-      throw error;
-    }
+        return {
+          status,
+          responseTime,
+        };
+      },
+      { formId: form.id, watcher: this.name, stage: 'fetch-or-parse' }
+    );
   }
 }

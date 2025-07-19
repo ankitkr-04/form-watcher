@@ -84,6 +84,28 @@ export class Cache<T = any> {
   /**
    * Stop the cleanup interval
    */
+  /**
+   * Compares a new value with the existing value for a key and updates it.
+   * Returns the status of the comparison.
+   * @param key The cache key.
+   * @param newValue The new value to compare and set.
+   * @returns 'initial' | 'changed' | 'unchanged'
+   */
+  public async compareAndSet(key: string, newValue: T): Promise<'initial' | 'changed' | 'unchanged'> {
+    const previousValue = await this.get(key);
+    await this.set(key, newValue);
+
+    if (previousValue === undefined) {
+      return 'initial';
+    }
+
+    if (JSON.stringify(previousValue) === JSON.stringify(newValue)) {
+      return 'unchanged';
+    }
+
+    return 'changed';
+  }
+
   stopCleanup(): void {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);

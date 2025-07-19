@@ -3,7 +3,7 @@ import { Form } from '@src/shared/types/types';
 import { ErrorLogger } from '@src/shared/utils/error.logger.util';
 import { log } from '@src/shared/utils/logger.util';
 
-import { BaseNotifier } from './base.notifier';
+import { HttpNotifier } from './http.notifier';
 
 export interface DiscordConfig {
   webhookUrl: string;
@@ -14,7 +14,7 @@ export interface DiscordConfig {
 const DISCORD_DEFAULT_AVATAR_URL = 'https://i.imgur.com/wSTFkRM.png';
 const DISCORD_DEFAULT_USERNAME = 'Form Watcher';
 
-export class DiscordNotifier extends BaseNotifier {
+export class DiscordNotifier extends HttpNotifier {
   protected readonly name = 'DiscordNotifier';
   private readonly config: DiscordConfig;
 
@@ -66,34 +66,12 @@ export class DiscordNotifier extends BaseNotifier {
       embeds: [embed],
     };
 
-    try {
-      const response = await fetch(this.config.webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...discordPayload,
-          username: this.config.username,
-          avatar_url: this.config.avatarUrl,
-        }),
-      });
+    const finalPayload = {
+      ...discordPayload,
+      username: this.config.username,
+      avatar_url: this.config.avatarUrl,
+    };
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Discord API error: ${response.status} ${errorText}`);
-      }
-
-      log.debug('Discord notification sent', {
-        formId: form.id,
-        status: response.status,
-      });
-    } catch (error) {
-      ErrorLogger.logError('DiscordNotifier', error, {
-        formId: form.id,
-        notifier: this.name,
-      });
-      throw error;
-    }
+    await this.sendHttpRequest(this.config.webhookUrl, finalPayload, form);
   }
 }

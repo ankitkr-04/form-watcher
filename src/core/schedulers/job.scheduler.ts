@@ -2,6 +2,7 @@ import cron from 'node-cron';
 
 import { WatcherRegistry } from '@src/infrastructure/watchers';
 import { Form } from '@src/shared/types/types';
+import { handleError } from '@src/shared/utils/error.handler.util';
 import { log } from '@src/shared/utils/logger.util';
 
 // This is mock data. In a real application, you would fetch this from a database.
@@ -43,24 +44,31 @@ const forms: Form[] = [
 ];
 
 async function runWatcherJob() {
-  log.info('Starting watcher job...');
-  const watchers = WatcherRegistry.getAll();
+  await handleError(
+    async () => {
+      log.info('Starting watcher job...');
+      const watchers = WatcherRegistry.getAll();
 
-  for (const [watcherType, watcher] of watchers) {
-    const relevantForms = forms.filter((form) => form.watcherType === watcherType && form.enabled);
+      for (const [watcherType, watcher] of watchers) {
+        const relevantForms = forms.filter((form) => form.watcherType === watcherType && form.enabled);
 
-    for (const form of relevantForms) {
-      try {
-        const result = await watcher.check(form);
-        log.info(
-          `Watcher '${watcherType}' for form '${form.name}' finished with status: ${result.status}`
-        );
-      } catch (error) {
-        log.error(`Watcher '${watcherType}' for form '${form.name}' failed`, error as Error);
+        for (const form of relevantForms) {
+          try {
+            const result = await watcher.check(form);
+            log.info(
+              `Watcher '${watcherType}' for form '${form.name}' finished with status: ${result.status}`
+            );
+          } catch (error) {
+            // Error is already logged by the watcher's handleError.
+            // This catch block ensures that a single failed form check doesn't stop the entire job.
+            log.warn(`Error in form '${form.name}', continuing to next form...`);
+          }
+        }
       }
-    }
-  }
-  log.info('Watcher job finished.');
+      log.info('Watcher job finished.');
+    },
+    { stage: 'job-execution', jobName: 'runWatcherJob' }
+  );
 }
 
 export const JobScheduler = {

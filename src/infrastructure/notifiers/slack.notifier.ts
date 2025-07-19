@@ -2,7 +2,7 @@ import { NotificationPayload } from '@src/shared/types/notification.types';
 import { Form } from '@src/shared/types/types';
 import { log } from '@src/shared/utils/logger.util';
 
-import { BaseNotifier } from './base.notifier';
+import { HttpNotifier } from './http.notifier';
 
 export interface SlackConfig {
   webhookUrl: string;
@@ -11,7 +11,7 @@ export interface SlackConfig {
   iconUrl?: string;
 }
 
-export class SlackNotifier extends BaseNotifier {
+export class SlackNotifier extends HttpNotifier {
   protected readonly name = 'SlackNotifier';
   private readonly config: SlackConfig;
 
@@ -57,31 +57,6 @@ export class SlackNotifier extends BaseNotifier {
       slackPayload.channel = this.config.channel;
     }
 
-    try {
-      const response = await fetch(this.config.webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      // Slack responds with 'ok' for successful requests
-      const responseText = await response.text();
-      if (responseText !== 'ok') {
-        throw new Error(`Slack API error: ${response.status} ${responseText}`);
-      }
-
-      log.debug('Slack notification sent', {
-        formId: form.id,
-        status: response.status,
-      });
-    } catch (error) {
-      log.error(
-        'Failed to send Slack notification',
-        error instanceof Error ? error : new Error(String(error))
-      );
-      throw error;
-    }
+    await this.sendHttpRequest(this.config.webhookUrl, slackPayload, form);
   }
 }
